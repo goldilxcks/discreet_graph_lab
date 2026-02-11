@@ -1,0 +1,270 @@
+import random
+import time
+from networkx.algorithms import tree
+import networkx as nx
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from itertools import combinations, groupby
+
+from networkx.algorithms import tree
+from networkx.algorithms import bellman_ford_predecessor_and_distance
+from networkx.algorithms import floyd_warshall_predecessor_and_distance
+
+import numpy.typing as npt
+# scikit-learn package
+from sklearn.datasets import load_iris
+from sklearn.model_selection import cross_val_score
+from sklearn.tree import DecisionTreeClassifier
+from sklearn import tree
+from sklearn.model_selection import train_test_split
+# You can use this function to generate a random graph with 'num_of_nodes'
+# nodes and 'completeness' probability of an edge between any two nodes
+# If 'directed' is True, the graph will be directed
+# If 'draw' is True, the graph will be drawn
+def gnp_random_connected_graph(num_of_nodes: int,
+                               completeness: int,
+                               directed: bool = False,
+                               draw: bool = False):
+    """
+    Generates a random graph, similarly to an Erdős-Rényi
+    graph, but enforcing that the resulting graph is conneted
+    (in case of undirected graphs)
+    """
+
+
+    if directed:
+        G = nx.DiGraph()
+    else:
+        G = nx.Graph()
+    edges = combinations(range(num_of_nodes), 2)
+    G.add_nodes_from(range(num_of_nodes))
+
+    for _, node_edges in groupby(edges, key = lambda x: x[0]):
+        node_edges = list(node_edges)
+        random_edge = random.choice(node_edges)
+        if random.random() < 0.5:
+            random_edge = random_edge[::-1]
+        G.add_edge(*random_edge)
+        for e in node_edges:
+            if random.random() < completeness:
+                G.add_edge(*e)
+
+    for (u,v,w) in G.edges(data=True):
+        w['weight'] = random.randint(-5, 20)
+
+    if draw:
+        plt.figure(figsize=(10,6))
+        if directed:
+            # draw with edge weights
+            pos = nx.arf_layout(G)
+            nx.draw(G,pos, node_color='lightblue',
+                    with_labels=True,
+                    node_size=500,
+                    arrowsize=20,
+                    arrows=True)
+            labels = nx.get_edge_attributes(G,'weight')
+            nx.draw_networkx_edge_labels(G, pos,edge_labels=labels)
+
+        else:
+            nx.draw(G, node_color='lightblue',
+                with_labels=True,
+                node_size=500)
+
+    return G
+class DSU:
+    def __init__(self, nodes):
+        self.parent = {v: v for v in nodes}
+        self.rank = {v: 0 for v in nodes}
+
+    def find(self, v):
+        if self.parent[v] != v:
+            self.parent[v] = self.find(self.parent[v])
+        return self.parent[v]
+
+    def union(self, a, b):
+        ra = self.find(a)
+        rb = self.find(b)
+        if ra == rb:
+            return False
+
+        if self.rank[ra] < self.rank[rb]:
+            ra, rb = rb, ra
+
+        self.parent[rb] = ra
+        if self.rank[ra] == self.rank[rb]:
+            self.rank[ra] += 1
+
+        return True
+
+
+def kruskal_algorithm(graph) -> list:
+    """
+    Docstring for kruskal_algorithm
+
+    :param nodes: Description
+    :type nodes: list
+    :param edges: Description
+    :type edges: list
+    :return: Description
+    :rtype: list
+    """
+    if graph.is_directed():
+        raise ValueError("MST is defined for undirected graphs only")
+    nodes = list(graph.nodes())
+    unsorted_edges = list(graph.edges(data=True))
+
+#     nodes = [1, 2, 3, 4, 5, 6, 7]
+#     unsorted_edges = [(1, 2, {'weight': 1}), (2, 3, {'weight': 2}), (3, 7, {'weight': 9}), (7, 6, {'weight': 8}), (6, 5, {'weight': 5}), (5, 4, {'weight': 3})
+# , (4, 1, {'weight': 3}), (1, 5, {'weight': 8}), (2, 5, {'weight': 2}), (3, 5, {'weight': 6})]
+    sorted_edges = sorted(unsorted_edges, key = lambda x: x[2]['weight'])
+
+    skeleton_tree = []
+    cycle = DSU(nodes)
+    # skeleton_tree = nx.Graph()
+    # skeleton_tree.add_nodes_from(nodes)
+
+    for u, v, w in sorted_edges:
+        weight = w['weight']
+        if cycle.union(u, v) is True:
+            skeleton_tree.append((u, v, weight))
+
+            if len(skeleton_tree) == len(nodes) - 1:
+                break
+
+    return skeleton_tree
+def min_time(func, *args, repeats=3):
+    best = float("inf")
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        func(*args)
+        t1 = time.perf_counter()
+        best = min(best, t1 - t0)
+    return best
+
+sizes = [10, 20, 50, 100, 200, 500]
+ps = [0.2, 0.5]
+repeats = 3
+
+for n in sizes:
+    for p in ps:
+        G = gnp_random_connected_graph(n, p, directed=False, draw=False)
+
+        t_my = min_time(kruskal_algorithm, G, repeats=repeats)
+        t_nx = min_time(lambda g: nx.minimum_spanning_tree(g, algorithm="kruskal"), G, repeats=repeats)
+
+        print(f"n={n}, p={p:.1f} | my={t_my:.6f}s | nx={t_nx:.6f}s")
+sizes = [10, 20, 50, 100, 200, 500]
+ps = [0.2, 0.5]
+repeats = 3
+
+for p in ps:
+    my_times = []
+    nx_times = []
+
+    for n in sizes:
+        G = gnp_random_connected_graph(n, p, directed=False, draw=False)
+
+        t_my = min_time(kruskal_algorithm, G, repeats=repeats)
+        t_nx = min_time(lambda g: nx.minimum_spanning_tree(g, algorithm="kruskal"), G, repeats=repeats)
+
+        my_times.append(t_my)
+        nx_times.append(t_nx)
+
+    plt.figure()
+    plt.plot(sizes, my_times, marker="o", label="My Kruskal")
+    plt.plot(sizes, nx_times, marker="o", label="NetworkX Kruskal")
+    plt.xlabel("Number of nodes (n)")
+    plt.ylabel("Time (seconds)")
+    plt.title(f"MST time comparison (p={p})")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+def weight_my_list(edge_list):
+    return sum(w for _, _, w in edge_list)
+
+def weight_nx_graph(mst_graph):
+    return sum(d["weight"] for _, _, d in mst_graph.edges(data=True))
+
+for n in [10, 50, 100]:
+    for p in [0.2, 0.5]:
+        G = gnp_random_connected_graph(n, p, directed=False, draw=False)
+
+        my_edges = kruskal_algorithm(G)  # твій список ребер (u,v,w)
+        nx_mst = nx.minimum_spanning_tree(G, algorithm="kruskal")
+
+        my_w = weight_my_list(my_edges)
+        nx_w = weight_nx_graph(nx_mst)
+
+        ok_edges = (len(my_edges) == n - 1)
+        ok_weight = (my_w == nx_w)
+
+        print(f"n={n}, p={p} | edges_ok={ok_edges} | weight_equal={ok_weight} | my_w={my_w} nx_w={nx_w}")
+print(kruskal_algorithm(G))
+
+def floyd_warshall(graph):
+    """Floyd-Warshall algorithm"""
+    nodes = list(graph.nodes)
+    edges = list(graph.edges(data=True))
+
+    matrix_w_0 = [[float('inf')] * len(nodes) for _ in range(len(nodes))]
+
+    if graph.is_directed():
+        for v1, v2, weight in edges:
+            matrix_w_0[v1 - 1][v2 - 1] = weight['weight']
+    elif not graph.is_directed():
+        for v1, v2, weight in edges:
+            matrix_w_0[v1 - 1][v2 - 1] = weight['weight']
+            matrix_w_0[v2 - 1][v1 - 1] = weight['weight']
+
+    for k in range(len(nodes)):
+        for i in range(len(nodes)):
+            matrix_w_0[i][i] = 0
+            for j in range(len(nodes)):
+                if matrix_w_0[i][j] > matrix_w_0[k][j] + matrix_w_0[i][k]:
+                    matrix_w_0[i][j] = matrix_w_0[k][j] + matrix_w_0[i][k]
+
+    for i in range(len(nodes)):
+        if matrix_w_0[i][i] < 0:
+            return "Є цикл від'ємної ваги."
+    return matrix_w_0#cписк списків
+def min_time(func, *args, repeats=3, **kwargs):
+    best = float("inf")
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        func(*args, **kwargs)
+        t1 = time.perf_counter()
+        best = min(best, t1 - t0)
+    return best
+
+sizes = [10, 20, 50, 100, 200, 500]
+ps = [0.2, 0.5]   # кожне p = окремий експеримент/окремий графік
+repeats = 3
+
+for p in ps:
+    my_times = []
+    nx_times = []
+
+    for n in sizes:
+        G = gnp_random_connected_graph(n, p, directed=False, draw=False)
+
+        # твоя реалізація
+        t_my = min_time(floyd_warshall, G, repeats=repeats)
+
+        # networkx: Floyd–Warshall (distance dict-of-dict)
+        t_nx = min_time(nx.floyd_warshall, G, weight="weight", repeats=repeats)
+
+        my_times.append(t_my)
+        nx_times.append(t_nx)
+
+        print(f"p={p:.1f}, n={n} | my={t_my:.6f}s | nx={t_nx:.6f}s")
+
+    plt.figure()
+    plt.plot(sizes, my_times, marker="o", label="My Floyd–Warshall")
+    plt.plot(sizes, nx_times, marker="o", label="NetworkX Floyd–Warshall")
+    plt.xlabel("Number of nodes (n)")
+    plt.ylabel("Time (seconds)")
+    plt.title(f"Floyd–Warshall time comparison (p={p}, repeats={repeats}, min time)")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
